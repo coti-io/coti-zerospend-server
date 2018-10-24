@@ -15,7 +15,7 @@ public class ZeroSpendServerApplication {
 
         SpringApplication.run(ZeroSpendServerApplication.class, args);
         log.info("##################################################################");
-        log.info("################    ZERO SPEND SERVER IS UP     ##################");
+        log.info("################    ZERO SPEND NODE IS UP       ##################");
         log.info("##################################################################");
     }
 }
