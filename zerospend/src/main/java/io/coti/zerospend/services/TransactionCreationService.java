@@ -79,7 +79,7 @@ public class TransactionCreationService {
 
     private void sendTransactionToPublisher(TransactionData transactionData) {
         log.info("Sending Zero Spend Transaction to DSPs. transaction: Hash = {} , SenderTrustScore = {}", transactionData.getHash(), transactionData.getSenderTrustScore());
-        propagationPublisher.propagate(transactionData, Arrays.asList(NodeType.DspNode, NodeType.TrustScoreNode));
+        propagationPublisher.propagate(transactionData, Arrays.asList(NodeType.DspNode, NodeType.TrustScoreNode, NodeType.FinancialServer));
 
     }
 
@@ -99,9 +99,9 @@ public class TransactionCreationService {
 
     private TransactionData createZeroSpendTransactionData(double trustScore, ZeroSpendTransactionType description) {
         List<BaseTransactionData> baseTransactions = new ArrayList<>();
-        BaseTransactionData baseTransactionData = new BaseTransactionData(transactionCryptoCreator.getAddress(), BigDecimal.ZERO, new Date());
+        BaseTransactionData baseTransactionData = new InputBaseTransactionData(transactionCryptoCreator.getAddress(), BigDecimal.ZERO, new Date());
         baseTransactions.add(baseTransactionData);
-        TransactionData transactionData = new TransactionData(baseTransactions, description.name(), trustScore, new Date());
+        TransactionData transactionData = new TransactionData(baseTransactions, description.name(), trustScore, new Date(), TransactionType.ZeroSpend);
         transactionData.setAttachmentTime(new Date());
         transactionData.setZeroSpend(true);
 
