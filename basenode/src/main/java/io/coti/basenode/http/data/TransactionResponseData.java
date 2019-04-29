@@ -9,7 +9,8 @@ import lombok.Data;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.math.BigDecimal;
-import java.util.Date;
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 
@@ -26,16 +27,12 @@ public class TransactionResponseData {
     private List<String> trustChainTransactionHashes;
     private boolean trustChainConsensus;
     private double trustChainTrustScore;
-    private Date transactionConsensusUpdateTime;
-    private Date createTime;
-    private Date attachmentTime;
-    private Date processStartTime;
-    private Date powStartTime;
-    private Date powEndTime;
+    private Instant transactionConsensusUpdateTime;
+    private Instant createTime;
+    private Instant attachmentTime;
     private double senderTrustScore;
-    private List<String> childrenTransactions;
+    private List<String> childrenTransactionHashes;
     private Boolean isValid;
-    private boolean isZeroSpend;
     private String transactionDescription;
 
 
@@ -47,7 +44,7 @@ public class TransactionResponseData {
         hash = transactionData.getHash().toHexString();
         amount = transactionData.getAmount();
         type = transactionData.getType();
-        baseTransactions = new LinkedList<>();
+        baseTransactions = new ArrayList<>();
         if (transactionData.getBaseTransactions() != null) {
             for (BaseTransactionData baseTransactionData : transactionData.getBaseTransactions()
                     ) {
@@ -55,7 +52,7 @@ public class TransactionResponseData {
                     Class<? extends BaseTransactionResponseData> baseTransactionResponseDataClass = BaseTransactionResponseClass.valueOf(BaseTransactionName.getName(baseTransactionData.getClass()).name()).getBaseTransactionResponseClass();
                     Constructor<? extends BaseTransactionResponseData> constructor = baseTransactionResponseDataClass.getConstructor(BaseTransactionData.class);
                     baseTransactions.add(constructor.newInstance(baseTransactionData));
-                } catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException | InstantiationException e ){
+                } catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException | InstantiationException e) {
                     e.printStackTrace();
                     throw new Exception(TRANSACTION_RESPONSE_ERROR);
                 }
@@ -71,16 +68,12 @@ public class TransactionResponseData {
         transactionConsensusUpdateTime = transactionData.getTransactionConsensusUpdateTime();
         createTime = transactionData.getCreateTime();
         attachmentTime = transactionData.getAttachmentTime();
-        processStartTime = transactionData.getProcessStartTime();
-        powStartTime = transactionData.getPowStartTime();
-        powEndTime = transactionData.getPowEndTime();
         senderTrustScore = transactionData.getSenderTrustScore();
 
-        childrenTransactions = new LinkedList<>();
-        transactionData.getChildrenTransactions().forEach(childrenTransaction -> childrenTransactions.add(childrenTransaction.toHexString()));
+        childrenTransactionHashes = new ArrayList<>();
+        transactionData.getChildrenTransactionHashes().forEach(childrenTransactionHash -> childrenTransactionHashes.add(childrenTransactionHash.toHexString()));
         transactionDescription = transactionData.getTransactionDescription();
         isValid = transactionData.isValid();
-        isZeroSpend = transactionData.isZeroSpend();
     }
 
 

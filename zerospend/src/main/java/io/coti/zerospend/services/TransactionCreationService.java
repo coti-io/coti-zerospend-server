@@ -2,6 +2,7 @@ package io.coti.zerospend.services;
 
 
 import io.coti.basenode.communication.interfaces.IPropagationPublisher;
+import io.coti.basenode.crypto.NodeCryptoHelper;
 import io.coti.basenode.crypto.TransactionCrypto;
 import io.coti.basenode.data.*;
 import io.coti.basenode.services.TransactionHelper;
@@ -11,13 +12,12 @@ import io.coti.zerospend.crypto.TransactionCryptoCreator;
 import io.coti.zerospend.data.ZeroSpendTransactionType;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Date;
-import java.util.List;
+import java.time.Instant;
+import java.util.*;
 
 import static io.coti.zerospend.data.ZeroSpendTransactionType.GENESIS;
 import static io.coti.zerospend.data.ZeroSpendTransactionType.STARVATION;
@@ -25,6 +25,7 @@ import static io.coti.zerospend.data.ZeroSpendTransactionType.STARVATION;
 @Slf4j
 @Service
 public class TransactionCreationService {
+    private static final int ZERO_SPEND_ADDRESS_INDEX = 0;
     @Autowired
     private TransactionIndexService transactionIndexService;
     @Autowired
@@ -39,6 +40,10 @@ public class TransactionCreationService {
     private TransactionCryptoCreator transactionCryptoCreator;
     @Autowired
     private DspVoteService dspVoteService;
+    @Autowired
+    private NodeCryptoHelper nodeCryptoHelper;
+    @Value("${zerospend.seed}")
+    private String seed;
 
     public String createNewStarvationZeroSpendTransaction(TransactionData transactionData) {
         return createNewZeroSpendTransaction(transactionData, STARVATION);
@@ -64,8 +69,6 @@ public class TransactionCreationService {
 
         if (zeroSpendTransactionType == STARVATION) {
             transactionData.setLeftParentHash(existingTransactionData.getHash());
-        } else {
-            transactionData.setGenesis(true);
         }
 
         DspConsensusResult dspConsensusResult = new DspConsensusResult(transactionData.getHash());
@@ -78,7 +81,7 @@ public class TransactionCreationService {
     }
 
     private void sendTransactionToPublisher(TransactionData transactionData) {
-        log.info("Sending Zero Spend Transaction to DSPs. transaction: Hash = {} , SenderTrustScore = {}", transactionData.getHash(), transactionData.getSenderTrustScore());
+        log.debug("Sending Zero Spend Transaction. transaction: Hash = {} , SenderTrustScore = {}", transactionData.getHash(), transactionData.getSenderTrustScore());
         propagationPublisher.propagate(transactionData, Arrays.asList(NodeType.DspNode, NodeType.TrustScoreNode, NodeType.FinancialServer));
 
     }
@@ -91,21 +94,28 @@ public class TransactionCreationService {
             DspConsensusResult dspConsensusResult = new DspConsensusResult(transactionData.getHash());
             dspConsensusResult.setDspConsensus(true);
             dspVoteService.setIndexForDspResult(transactionData, dspConsensusResult);
-            transactionData.setGenesis(true);
 
             transactionHelper.attachTransactionToCluster(transactionData);
+            try {
+                Thread.sleep(1);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
         }
     }
 
     private TransactionData createZeroSpendTransactionData(double trustScore, ZeroSpendTransactionType description) {
+        Map<Hash, Integer> addressHashToAddressIndexMap = new HashMap<>();
         List<BaseTransactionData> baseTransactions = new ArrayList<>();
-        BaseTransactionData baseTransactionData = new InputBaseTransactionData(transactionCryptoCreator.getAddress(), BigDecimal.ZERO, new Date());
+        Hash addressHash = nodeCryptoHelper.generateAddress(seed, ZERO_SPEND_ADDRESS_INDEX);
+        BaseTransactionData baseTransactionData = new InputBaseTransactionData(addressHash, BigDecimal.ZERO, Instant.now());
+        addressHashToAddressIndexMap.put(addressHash, ZERO_SPEND_ADDRESS_INDEX);
         baseTransactions.add(baseTransactionData);
-        TransactionData transactionData = new TransactionData(baseTransactions, description.name(), trustScore, new Date(), TransactionType.ZeroSpend);
-        transactionData.setAttachmentTime(new Date());
-        transactionData.setZeroSpend(true);
+        TransactionData transactionData = new TransactionData(baseTransactions, description.name(), trustScore, Instant.now(), TransactionType.ZeroSpend);
+        transactionData.setAttachmentTime(Instant.now());
 
-        transactionCryptoCreator.signBaseTransactions(transactionData);
+
+        transactionCryptoCreator.signBaseTransactions(transactionData, addressHashToAddressIndexMap);
         transactionCrypto.signMessage(transactionData);
         return transactionData;
     }
