@@ -1,4 +1,4 @@
-package io.coti.zerospend.filters;
+package io.coti.basenode.filters;
 
 import io.coti.basenode.http.CustomHttpServletResponse;
 import io.coti.basenode.http.Response;
@@ -59,6 +59,6 @@ public class AdminFilter implements Filter {
 
     @Override
     public void destroy() {
-
+        log.info("Destroying admin filter");
     }
 }

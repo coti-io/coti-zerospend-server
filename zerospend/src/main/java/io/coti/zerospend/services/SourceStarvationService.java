@@ -15,6 +15,8 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Date;
 import java.util.LinkedList;
+import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
@@ -57,6 +59,20 @@ public class SourceStarvationService {
                 }
             }
         }
+
+        List<Set<TransactionData>> sourceListsByTrustScore = clusterService.getSourceListsByTrustScore();
+        boolean isTrustScoreRangeContainsSource = false;
+        for (int i = 1; i <= 100; i++) {
+            if (!sourceListsByTrustScore.get(i).isEmpty()) {
+                isTrustScoreRangeContainsSource = true;
+            }
+            if (i % 10 == 0) {
+                if (!isTrustScoreRangeContainsSource) {
+                    transactionCreationService.createNewGenesisZeroSpendTransaction(new Double(i));
+                }
+                isTrustScoreRangeContainsSource = false;
+            }
+        }
     }
 
     private void parentInNonZeroChain(Hash parentHash, Hash transactionHash, ConcurrentHashMap<Hash, Instant> nonZeroSpendChainTransactions) {
@@ -72,7 +88,7 @@ public class SourceStarvationService {
         }
     }
 
-    String millisecondsToMinutes(long milliseconds) {
+    private String millisecondsToMinutes(long milliseconds) {
         return new SimpleDateFormat("mm:ss").format(new Date(milliseconds));
     }
 }
