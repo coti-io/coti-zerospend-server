@@ -24,6 +24,7 @@ import static io.coti.zerospend.data.ZeroSpendTransactionType.STARVATION;
 @Slf4j
 @Service
 public class TransactionCreationService {
+
     private static final int ZERO_SPEND_ADDRESS_INDEX = 0;
     @Autowired
     private TransactionHelper transactionHelper;
@@ -90,7 +91,7 @@ public class TransactionCreationService {
 
     private void sendTransactionToPublisher(TransactionData transactionData) {
         log.debug("Sending Zero Spend Transaction. transaction: Hash = {} , SenderTrustScore = {}", transactionData.getHash(), transactionData.getSenderTrustScore());
-        propagationPublisher.propagate(transactionData, Arrays.asList(NodeType.DspNode, NodeType.TrustScoreNode, NodeType.FinancialServer));
+        propagationPublisher.propagate(transactionData, Arrays.asList(NodeType.DspNode, NodeType.TrustScoreNode, NodeType.FinancialServer, NodeType.HistoryNode));
 
     }
 
