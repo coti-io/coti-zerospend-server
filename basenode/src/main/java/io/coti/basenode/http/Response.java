@@ -1,10 +1,13 @@
 package io.coti.basenode.http;
 
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 @Data
+@EqualsAndHashCode(callSuper = true)
 public class Response extends BaseResponse {
-    public String message;
+
+    protected String message;
 
     public Response() {
         this("");

@@ -1,12 +1,14 @@
 package io.coti.basenode.data;
 
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 import javax.validation.constraints.Positive;
 import java.math.BigDecimal;
 import java.time.Instant;
 
 @Data
+@EqualsAndHashCode(callSuper = true, onlyExplicitlyIncluded = true)
 public abstract class OutputBaseTransactionData extends BaseTransactionData {
 
     private static final long serialVersionUID = 5660628603489226186L;
@@ -22,6 +24,7 @@ public abstract class OutputBaseTransactionData extends BaseTransactionData {
         this.setOriginalAmount(originalAmount);
     }
 
+    @Override
     public void setAmount(BigDecimal amount) {
         if (amount == null || amount.signum() < 0) {
             throw new IllegalStateException("Output transaction can not have negative amount");

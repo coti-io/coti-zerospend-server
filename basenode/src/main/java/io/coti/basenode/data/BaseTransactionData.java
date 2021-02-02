@@ -9,10 +9,10 @@ import javax.validation.constraints.NotNull;
 import java.io.Serializable;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Arrays;
 
 @Data
 @JsonTypeInfo(use = JsonTypeInfo.Id.CUSTOM,
-        include = JsonTypeInfo.As.PROPERTY,
         property = "name")
 @JsonTypeIdResolver(BaseTransactionDataResolver.class)
 public abstract class BaseTransactionData implements Serializable {
@@ -31,7 +31,7 @@ public abstract class BaseTransactionData implements Serializable {
 
     }
 
-    public BaseTransactionData(Hash addressHash, BigDecimal amount, Instant createTime) {
+    protected BaseTransactionData(Hash addressHash, BigDecimal amount, Instant createTime) {
         this.addressHash = addressHash;
         this.createTime = createTime;
         this.setAmount(amount);
@@ -47,6 +47,11 @@ public abstract class BaseTransactionData implements Serializable {
             return false;
         }
         return hash.equals(((BaseTransactionData) other).hash);
+    }
+
+    @Override
+    public int hashCode() {
+        return Arrays.hashCode(hash.getBytes());
     }
 
     public void setSignature(SignatureData signatureData) {

@@ -15,19 +15,18 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.PostConstruct;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
 @Slf4j
 @Service
 public class ClusterService implements IClusterService {
 
-    private List<Set<TransactionData>> sourceListsByTrustScore = new ArrayList<>();
+    private ArrayList<HashSet<Hash>> sourceSetsByTrustScore;
+    private HashMap<Hash, TransactionData> sourceMap;
     @Autowired
     private Transactions transactions;
     @Autowired
@@ -38,19 +37,22 @@ public class ClusterService implements IClusterService {
     private TrustChainConfirmationService trustChainConfirmationService;
     private boolean isStarted;
     private ConcurrentHashMap<Hash, TransactionData> trustChainConfirmationCluster;
-    private AtomicLong totalSources = new AtomicLong(0);
+    private final AtomicLong totalSources = new AtomicLong(0);
+    private final ReentrantReadWriteLock readWriteLock = new ReentrantReadWriteLock();
 
     @PostConstruct
     public void init() {
         trustChainConfirmationCluster = new ConcurrentHashMap<>();
+        sourceSetsByTrustScore = new ArrayList<>();
+        sourceMap = new HashMap<>();
         for (int i = 0; i <= 100; i++) {
-            sourceListsByTrustScore.add(Sets.newConcurrentHashSet());
+            sourceSetsByTrustScore.add(Sets.newHashSet());
         }
     }
 
     @Override
     public void addExistingTransactionOnInit(TransactionData transactionData) {
-        updateParents(transactionData);
+        removeTransactionParentsFromSources(transactionData);
         if (!transactionData.isTrustChainConsensus()) {
             addTransactionToTrustChainConfirmationCluster(transactionData);
         }
@@ -61,7 +63,7 @@ public class ClusterService implements IClusterService {
         updateParentsByMissingTransaction(transactionData, trustChainUnconfirmedExistingTransactionHashes);
         if (!transactionData.isTrustChainConsensus()) {
             addTransactionToTrustChainConfirmationCluster(transactionData);
-        } else if (transactionData.isTrustChainConsensus() && trustChainUnconfirmedExistingTransactionHashes.remove(transactionData.getHash())) {
+        } else if (trustChainUnconfirmedExistingTransactionHashes.remove(transactionData.getHash())) {
             removeTransactionFromTrustChainConfirmationCluster(transactionData);
         }
     }
@@ -137,52 +139,71 @@ public class ClusterService implements IClusterService {
     }
 
     private void removeTransactionFromSources(Hash transactionHash) {
-        TransactionData transactionData = transactions.getByHash(transactionHash);
-        if (transactionData != null && sourceListsByTrustScore.get(transactionData.getRoundedSenderTrustScore()).remove(transactionData)) {
-            totalSources.decrementAndGet();
+        try {
+            readWriteLock.writeLock().lock();
+            TransactionData transactionData = sourceMap.remove(transactionHash);
+            if (transactionData != null) {
+                sourceSetsByTrustScore.get(transactionData.getRoundedSenderTrustScore()).remove(transactionHash);
+                totalSources.decrementAndGet();
+            }
+        } finally {
+            readWriteLock.writeLock().unlock();
         }
     }
 
     private void addTransactionToTrustChainConfirmationCluster(TransactionData transactionData) {
-        trustChainConfirmationCluster.put(transactionData.getHash(), transactionData);
+        Hash transactionHash = transactionData.getHash();
+        trustChainConfirmationCluster.put(transactionHash, transactionData);
 
-        if (transactionData.isSource() && sourceListsByTrustScore.get(transactionData.getRoundedSenderTrustScore()).add(transactionData)) {
-            totalSources.incrementAndGet();
+        try {
+            readWriteLock.writeLock().lock();
+            if (transactionData.isSource() && sourceMap.put(transactionHash, transactionData) == null) {
+                sourceSetsByTrustScore.get(transactionData.getRoundedSenderTrustScore()).add(transactionHash);
+                totalSources.incrementAndGet();
+            }
+        } finally {
+            readWriteLock.writeLock().unlock();
         }
 
-        log.debug("Added New Transaction with hash:{}", transactionData.getHash());
+        log.debug("Added New Transaction with hash:{}", transactionHash);
     }
 
     private void removeTransactionFromTrustChainConfirmationCluster(TransactionData transactionData) {
+        Hash transactionHash = transactionData.getHash();
         trustChainConfirmationCluster.remove(transactionData.getHash());
 
-        if (transactionData.isSource() && sourceListsByTrustScore.get(transactionData.getRoundedSenderTrustScore()).remove(transactionData)) {
-            totalSources.decrementAndGet();
+        try {
+            readWriteLock.writeLock().lock();
+            if (transactionData.isSource() && sourceMap.remove(transactionHash) != null) {
+                sourceSetsByTrustScore.get(transactionData.getRoundedSenderTrustScore()).remove(transactionHash);
+                totalSources.decrementAndGet();
+            }
+        } finally {
+            readWriteLock.writeLock().unlock();
         }
-
     }
 
     @Override
     public void selectSources(TransactionData transactionData) {
-        List<Set<TransactionData>> trustScoreToTransactionMappingSnapshot =
-                Collections.unmodifiableList(sourceListsByTrustScore);
-
+        List<Set<Hash>> trustScoreToTransactionMappingSnapshot =
+                Collections.unmodifiableList(sourceSetsByTrustScore);
+        Map<Hash, TransactionData> sourceMapSnapshot = Collections.unmodifiableMap(sourceMap);
         List<TransactionData> selectedSourcesForAttachment =
                 sourceSelector.selectSourcesForAttachment(
                         trustScoreToTransactionMappingSnapshot,
-                        transactionData.getSenderTrustScore());
+                        sourceMapSnapshot,
+                        transactionData.getSenderTrustScore(), readWriteLock);
 
-        if (selectedSourcesForAttachment.size() == 0) {
+        if (selectedSourcesForAttachment.isEmpty()) {
             return;
         }
-        if (selectedSourcesForAttachment.size() > 0) {
-            transactionData.setLeftParentHash(selectedSourcesForAttachment.get(0).getHash());
-        }
+
+        transactionData.setLeftParentHash(selectedSourcesForAttachment.get(0).getHash());
         if (selectedSourcesForAttachment.size() > 1) {
             transactionData.setRightParentHash(selectedSourcesForAttachment.get(1).getHash());
         }
 
-        List<Hash> selectedSourceHashes = selectedSourcesForAttachment.stream().map(source -> source.getHash()).collect(Collectors.toList());
+        List<Hash> selectedSourceHashes = selectedSourcesForAttachment.stream().map(TransactionData::getHash).collect(Collectors.toList());
         log.debug("For transaction with hash: {} we found the following sources: {}", transactionData.getHash(), selectedSourceHashes);
     }
 
@@ -193,7 +214,7 @@ public class ClusterService implements IClusterService {
 
     @Override
     public Set<Hash> getTrustChainConfirmationTransactionHashes() {
-        return trustChainConfirmationCluster.keySet().stream().collect(Collectors.toSet());
+        return new HashSet<>(trustChainConfirmationCluster.keySet());
     }
 
     @Override
@@ -202,8 +223,8 @@ public class ClusterService implements IClusterService {
     }
 
     @Override
-    public List<Set<TransactionData>> getSourceListsByTrustScore() {
-        return Collections.unmodifiableList(sourceListsByTrustScore);
+    public ArrayList<HashSet<Hash>> getSourceSetsByTrustScore() {
+        return SerializationUtils.clone(sourceSetsByTrustScore);
     }
 
 }

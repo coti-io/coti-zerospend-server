@@ -5,13 +5,14 @@ import lombok.Data;
 
 @Data
 public abstract class BaseResponse implements IResponse {
-    public String status;
 
-    public BaseResponse() {
+    protected String status;
+
+    protected BaseResponse() {
         this.status = BaseNodeHttpStringConstants.STATUS_SUCCESS;
     }
 
-    public BaseResponse(String status) {
+    protected BaseResponse(String status) {
         this.status = status;
     }
 }

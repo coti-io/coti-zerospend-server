@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 
 import java.nio.ByteBuffer;
 import java.util.Arrays;
+import java.util.Optional;
 
 @Slf4j
 @Service
@@ -27,24 +28,23 @@ public class TransactionIndexService {
         log.info("{} is up", this.getClass().getSimpleName());
     }
 
-    public synchronized Boolean insertNewTransactionIndex(TransactionData transactionData) {
+    public synchronized Optional<Boolean> insertNewTransactionIndex(TransactionData transactionData) {
         if (transactionData.getDspConsensusResult() == null) {
             log.error("Invalid transaction index for transaction {}", transactionData.getHash());
-            return null;
+            return Optional.empty();
         }
         if (transactionData.getDspConsensusResult().getIndex() < lastTransactionIndexData.getIndex() + 1) {
             log.debug("Already inserted index {}", transactionData.getDspConsensusResult().getIndex());
-            return null;
+            return Optional.empty();
         }
         if (transactionData.getDspConsensusResult().getIndex() == lastTransactionIndexData.getIndex() + 1) {
             log.debug("Inserting new transaction {} with index: {}", transactionData.getHash(), lastTransactionIndexData.getIndex() + 1);
             lastTransactionIndexData = getNextIndexData(lastTransactionIndexData, transactionData);
             transactionIndexes.put(lastTransactionIndexData);
             transactionHelper.removeNoneIndexedTransaction(transactionData);
-            return true;
+            return Optional.of(Boolean.TRUE);
         } else {
-            //   log.error("Index is not of the last transaction: Index={}, currentLast={}", transactionData.getDspConsensusResult().getIndex(), lastTransactionIndexData.getIndex());
-            return false;
+            return Optional.of(Boolean.FALSE);
         }
     }
 
@@ -56,14 +56,14 @@ public class TransactionIndexService {
         lastTransactionIndexData = transactionIndexData;
     }
 
-    public static TransactionIndexData getNextIndexData(TransactionIndexData currentLastTransactionIndexData, TransactionData newTransactionData) {
+    public TransactionIndexData getNextIndexData(TransactionIndexData currentLastTransactionIndexData, TransactionData newTransactionData) {
         return new TransactionIndexData(
                 newTransactionData.getHash(),
                 currentLastTransactionIndexData.getIndex() + 1,
                 getAccumulatedHash(currentLastTransactionIndexData.getAccumulatedHash(), newTransactionData.getHash(), currentLastTransactionIndexData.getIndex() + 1));
     }
 
-    public static byte[] getAccumulatedHash(byte[] previousAccumulatedHash, Hash newTransactionHash, long newIndex) {
+    public byte[] getAccumulatedHash(byte[] previousAccumulatedHash, Hash newTransactionHash, long newIndex) {
         byte[] newTransactionHashBytes = newTransactionHash.getBytes();
         ByteBuffer combinedHash = ByteBuffer.allocate(previousAccumulatedHash.length + newTransactionHashBytes.length + Long.BYTES);
         combinedHash.put(previousAccumulatedHash).put(newTransactionHashBytes).putLong(newIndex);

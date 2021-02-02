@@ -15,6 +15,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 @Slf4j
 @Service
@@ -23,26 +24,26 @@ public class TrustChainConfirmationService {
 
     @Value("${cluster.trust.chain.threshold}")
     private int threshold;
-    private ConcurrentHashMap<Hash, TransactionData> trustChainConfirmationCluster;
+    private ConcurrentMap<Hash, TransactionData> trustChainConfirmationCluster;
     private LinkedList<TransactionData> topologicalOrderedGraph;
     @Autowired
     private IClusterHelper clusterHelper;
 
-    public void init(ConcurrentHashMap<Hash, TransactionData> trustChainConfirmationCluster) {
+    public void init(ConcurrentMap<Hash, TransactionData> trustChainConfirmationCluster) {
         this.trustChainConfirmationCluster = new ConcurrentHashMap<>(trustChainConfirmationCluster);
         topologicalOrderedGraph = new LinkedList<>();
         clusterHelper.sortByTopologicalOrder(trustChainConfirmationCluster, topologicalOrderedGraph);
     }
 
     private void setTotalTrustScore(TransactionData parent) {
-        double maxSonsTotalTrustScore = 0;
+        double maxChildrenTotalTrustScore = 0;
 
         for (Hash transactionHash : parent.getChildrenTransactionHashes()) {
             try {
                 TransactionData child = trustChainConfirmationCluster.get(transactionHash);
                 if (child != null && child.getTrustChainTrustScore()
-                        > maxSonsTotalTrustScore) {
-                    maxSonsTotalTrustScore = trustChainConfirmationCluster.get(transactionHash).getTrustChainTrustScore();
+                        > maxChildrenTotalTrustScore) {
+                    maxChildrenTotalTrustScore = child.getTrustChainTrustScore();
                 }
             } catch (Exception e) {
                 log.error("in setTotalSumScore: parent: {} child: {}", parent.getHash(), transactionHash);
@@ -51,8 +52,8 @@ public class TrustChainConfirmationService {
         }
 
         // updating parent trustChainTrustScore
-        if (parent.getTrustChainTrustScore() < parent.getSenderTrustScore() + maxSonsTotalTrustScore) {
-            parent.setTrustChainTrustScore(parent.getSenderTrustScore() + maxSonsTotalTrustScore);
+        if (parent.getTrustChainTrustScore() < parent.getSenderTrustScore() + maxChildrenTotalTrustScore) {
+            parent.setTrustChainTrustScore(parent.getSenderTrustScore() + maxChildrenTotalTrustScore);
         }
 
     }

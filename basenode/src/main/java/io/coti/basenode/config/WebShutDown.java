@@ -14,7 +14,7 @@ import java.util.concurrent.TimeUnit;
 public class WebShutDown implements TomcatConnectorCustomizer {
 
     private static final int TIMEOUT = 180;
-    private volatile Connector connector;
+    private Connector connector;
 
     @Override
     public void customize(Connector connector) {
@@ -23,6 +23,7 @@ public class WebShutDown implements TomcatConnectorCustomizer {
 
     @EventListener
     public void shutdown(ContextClosedEvent contextClosedEvent) {
+        Thread.currentThread().setName("WEBSERVER SHUTDOWN");
         this.connector.pause();
         Executor executor = this.connector.getProtocolHandler().getExecutor();
         if (executor instanceof ThreadPoolExecutor) {

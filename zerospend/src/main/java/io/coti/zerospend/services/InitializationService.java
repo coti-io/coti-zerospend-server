@@ -1,11 +1,13 @@
 package io.coti.zerospend.services;
 
+import io.coti.basenode.communication.interfaces.IReceiver;
 import io.coti.basenode.crypto.NodeCryptoHelper;
-import io.coti.basenode.data.DspVote;
 import io.coti.basenode.data.NetworkNodeData;
 import io.coti.basenode.data.NodeType;
 import io.coti.basenode.data.TransactionData;
+import io.coti.basenode.data.TransactionDspVote;
 import io.coti.basenode.data.interfaces.IPropagatable;
+import io.coti.basenode.exceptions.CotiRunTimeException;
 import io.coti.basenode.model.Transactions;
 import io.coti.basenode.services.BaseNodeInitializationService;
 import io.coti.basenode.services.interfaces.ICommunicationService;
@@ -34,14 +36,17 @@ public class InitializationService extends BaseNodeInitializationService {
     @Autowired
     private ICommunicationService communicationService;
     @Autowired
+    private IReceiver messageReceiver;
+    @Autowired
     private DspVoteService dspVoteService;
     @Autowired
     private TransactionCreationService transactionCreationService;
     @Autowired
     private Transactions transactions;
-    private EnumMap<NodeType, List<Class<? extends IPropagatable>>> publisherNodeTypeToMessageTypesMap = new EnumMap<>(NodeType.class);
+    private final EnumMap<NodeType, List<Class<? extends IPropagatable>>> publisherNodeTypeToMessageTypesMap = new EnumMap<>(NodeType.class);
 
     @PostConstruct
+    @Override
     public void init() {
         try {
             super.init();
@@ -49,31 +54,35 @@ public class InitializationService extends BaseNodeInitializationService {
             super.createNetworkNodeData();
             super.getNetwork();
 
-            publisherNodeTypeToMessageTypesMap.put(NodeType.FinancialServer, Arrays.asList(TransactionData.class));
+            publisherNodeTypeToMessageTypesMap.put(NodeType.FinancialServer, Collections.singletonList(TransactionData.class));
 
             communicationService.initSubscriber(NodeType.ZeroSpendServer, publisherNodeTypeToMessageTypesMap);
 
-            HashMap<String, Consumer<Object>> classNameToReceiverHandlerMapping = new HashMap<>();
+            HashMap<String, Consumer<IPropagatable>> classNameToReceiverHandlerMapping = new HashMap<>();
             classNameToReceiverHandlerMapping.put(
-                    DspVote.class.getName(), data ->
-                            dspVoteService.receiveDspVote((DspVote) data));
+                    TransactionDspVote.class.getName(), data ->
+                            dspVoteService.receiveDspVote((TransactionDspVote) data));
             communicationService.initReceiver(receivingPort, classNameToReceiverHandlerMapping);
-
             communicationService.initPublisher(propagationPort, NodeType.ZeroSpendServer);
 
             networkService.addListToSubscription(networkService.getMapFromFactory(NodeType.DspNode).values());
             if (networkService.getSingleNodeData(NodeType.FinancialServer) != null) {
-                networkService.addListToSubscription(new ArrayList<>(Arrays.asList(networkService.getSingleNodeData(NodeType.FinancialServer))));
+                networkService.addListToSubscription(new ArrayList<>(Collections.singletonList(networkService.getSingleNodeData(NodeType.FinancialServer))));
             }
             if (!recoveryServerAddress.isEmpty()) {
                 networkService.setRecoveryServerAddress(recoveryServerAddress);
             }
 
             super.initServices();
+            messageReceiver.initReceiverHandler();
 
             if (transactions.isEmpty()) {
                 transactionCreationService.createGenesisTransactions();
             }
+        } catch (CotiRunTimeException e) {
+            log.error("Errors at {}", this.getClass().getSimpleName());
+            e.logMessage();
+            System.exit(SpringApplication.exit(applicationContext));
         } catch (Exception e) {
             log.error("Errors at {}", this.getClass().getSimpleName());
             log.error("{}: {}", e.getClass().getName(), e.getMessage());
@@ -83,7 +92,7 @@ public class InitializationService extends BaseNodeInitializationService {
     }
 
     protected NetworkNodeData createNodeProperties() {
-        NetworkNodeData networkNodeData = new NetworkNodeData(NodeType.ZeroSpendServer, nodeIp, serverPort, NodeCryptoHelper.getNodeHash(), networkType);
+        NetworkNodeData networkNodeData = new NetworkNodeData(NodeType.ZeroSpendServer, version, nodeIp, serverPort, NodeCryptoHelper.getNodeHash(), networkType);
         networkNodeData.setPropagationPort(propagationPort);
         networkNodeData.setReceivingPort(receivingPort);
         return networkNodeData;

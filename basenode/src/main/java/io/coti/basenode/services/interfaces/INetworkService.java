@@ -2,7 +2,6 @@ package io.coti.basenode.services.interfaces;
 
 import io.coti.basenode.data.*;
 
-import javax.validation.ValidationException;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -12,6 +11,8 @@ public interface INetworkService {
     void init();
 
     void handleNetworkChanges(NetworkData networkData);
+
+    void verifyNodeManager(NetworkData newNetworkData);
 
     String getRecoveryServerAddress();
 
@@ -25,13 +26,9 @@ public interface INetworkService {
 
     void removeNode(NetworkNodeData networkNodeData);
 
-    boolean updateNetworkNode(NetworkNodeData networkNodeData);
-
-    void validateNetworkNodeData(NetworkNodeData networkNodeData) throws ValidationException;
+    void validateNetworkNodeData(NetworkNodeData networkNodeData);
 
     boolean validateFeeData(FeeData feeData);
-
-    boolean isNodeExistsOnMemory(NetworkNodeData networkNodeData);
 
     List<NetworkNodeData> getShuffledNetworkNodeDataListFromMapValues(NodeType nodeType);
 
@@ -51,6 +48,8 @@ public interface INetworkService {
 
     NetworkData getNetworkData();
 
+    NetworkData getSignedNetworkData();
+
     void setNetworkData(NetworkData networkData);
 
     void setNetworkNodeData(NetworkNodeData networkNodeData);
@@ -59,4 +58,7 @@ public interface INetworkService {
 
     void connectToNetwork();
 
+    String getHost(String webServerUrl);
+
+    boolean isZeroSpendServerInNetwork();
 }
